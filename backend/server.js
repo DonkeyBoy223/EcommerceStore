@@ -37,6 +37,18 @@ const pool = mysql.createPool({
 const generateJwtToken = (payload, secretKey, expiresIn) => {
     return jwt.sign(payload, secretKey, { expiresIn });
 };
+app.get('/genJWT', (req, res) => {
+  const payload = { userId: '123456', username: 'exampleuser', roles: ['user'] };
+
+  try {
+    const token = jwt.sign(payload, secretKey, { expiresIn: '1h' });
+    console.log('JWT Token Generated!')
+    res.json({ token });
+  } catch (error) {
+    console.error('Error generating JWT token:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 app.post('/register', async (req, res) => {
     const { username, password, email, firstname, lastname } = req.body;
   
@@ -286,6 +298,49 @@ app.post('/register', async (req, res) => {
     } catch (error) {
       console.error('Error fetching products:', error);
       res.status(500).json({ error: 'Failed to fetch products' });
+    }
+  });
+  app.post('/change_stock', async (req, res) => {
+    const { productIDs } = req.body;
+  
+    // Verify the JWT token from the Authorization header
+    const token = req.headers.authorization;
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized access' });
+    }
+  
+    try {
+      // Decode the JWT token to get the user information
+      const decodedToken = jwt.verify(token, secretKey);
+      // Assuming your JWT contains a 'user_id' field, you can access it like this:
+      const userId = decodedToken.user_id;
+  
+      // Loop through the array of product IDs and update the product availability for each product
+      for (const productID of productIDs) {
+        // Fetch the current product information from the database
+        const [productResults] = await pool.promise().query('SELECT * FROM products WHERE product_id = ?', [productID]);
+        if (productResults.length === 0) {
+          console.log(`Product not found with ID: ${productID}`);
+          continue; // Skip to the next product if not found
+        }
+  
+        const product = productResults[0];
+        // Toggle the product_availability field
+        const newProductAvailability = product.product_availability === 0 ? 1 : 0;
+  
+        // Update the product_availability in the database
+        await pool.promise().query('UPDATE products SET product_availability = ? WHERE product_id = ?', [newProductAvailability, productID]);
+  
+        console.log(`Product stock updated successfully for ID: ${productID} to ${newProductAvailability}`);
+      }
+  
+      return res.json({ message: 'Product stocks updated successfully' });
+    } catch (error) {
+      console.error('Error changing product stocks:', error);
+      if (error instanceof jwt.JsonWebTokenError) {
+        return res.status(401).json({ error: 'Unauthorized access' });
+      }
+      return res.status(500).json({ error: 'Internal server error' });
     }
   });
 
