@@ -22,6 +22,8 @@ const databaseUser = process.env.DATABASE_USER;
 const databasePass = process.env.DATABASE_PASS;
 const databaseHost = process.env.DATABASE_HOST;
 const secretKey = process.env.SECRET_KEY;
+const nodemailerUser = process.env.NODEMAILER_USER;
+const nodemailerPass = process.env.NODEMAILER_PASS;
 
 // Create a MySQL connection pool
 const pool = mysql.createPool({
@@ -229,13 +231,13 @@ app.post('/register', async (req, res) => {
       const transporter = nodemailer.createTransport({
         service: 'gmail', // Replace with your email service provider
         auth: {
-          user: 'sdoncaster5@gmail.com', // Replace with your email address
-          pass: 'qzvvpmnkpoodfxlw', // Replace with your email password
+          user: `${nodemailerUser}`, // Replace with your email address
+          pass: `${nodemailerPass}`, // Replace with your email password
         },
       });
     
       const mailOptions = {
-        from: 'sdoncaster5@gmail.com',
+        from: `${nodemailerUser}`,
         to: email,
         subject: 'Password Reset Request',
         html: `<p>Click the following link to reset your password: <a href="http://localhost:3000/reset-password?token=${resetToken}">Reset Password</a></p>`
@@ -341,6 +343,33 @@ app.post('/register', async (req, res) => {
         return res.status(401).json({ error: 'Unauthorized access' });
       }
       return res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+  app.post('/check_availability', async (req, res) => {
+    const productId = req.body.productId; // Assuming the frontend sends the product ID in the request body
+  
+    try {
+      const connection = await pool.promise().getConnection();
+      const [result] = await connection.query('SELECT product_availability FROM products WHERE product_id = ?', [productId]);
+      connection.release();
+  
+      if (result.length === 0) {
+        // If no product with the given ID exists in the database
+        return res.status(404).json({ message: 'Product not found' });
+      }
+  
+      const productAvailability = result[0].product_availability;
+  
+      if (productAvailability === 1) {
+        // If product is in stock
+        return res.status(200).json({ message: 'Product is in stock' });
+      } else {
+        // If product is out of stock
+        return res.status(404).json({ message: 'Product is out of stock' });
+      }
+    } catch (error) {
+      console.error('Error checking product availability:', error);
+      return res.status(500).json({ message: 'Internal server error' });
     }
   });
 
